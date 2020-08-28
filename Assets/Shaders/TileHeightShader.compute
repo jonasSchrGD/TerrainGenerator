@@ -1,0 +1,23 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+RWStructuredBuffer<float3> vertices;
+RWStructuredBuffer<float> heightMap;
+int stepSize;
+int steps;
+int maxSteps;
+
+SamplerState LinearSampler
+{
+    Filter = MIN_MAG_MIP_LINEAR;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+[numthreads(4,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    int x = (id.x % steps) * stepSize;
+    int y = (id.x / steps) * stepSize;
+    vertices[id.x].y = heightMap[y * maxSteps + x];
+}
