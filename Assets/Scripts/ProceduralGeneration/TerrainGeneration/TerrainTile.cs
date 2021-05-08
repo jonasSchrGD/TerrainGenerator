@@ -19,16 +19,21 @@ public class TerrainTile : MonoBehaviour
     MeshFilter _meshFilter;
     MeshCollider _meshCollider;
 
-    void Start()
+    void Awake()
     {
+        _kernel = -1;
         _meshFilter = GetComponent<MeshFilter>();
         _meshCollider = GetComponent<MeshCollider>();
 
         _clearHeightData = true;
         LoadTerrainData();
     }
+    void OnEnable()
+    {
+        Awake();
+    }
 
-    private void Update()
+    void Update()
     {
 #if UNITY_EDITOR
         if ((_clearHeightData || _calculateHeightPerFrame) && !Application.isPlaying)
@@ -51,8 +56,12 @@ public class TerrainTile : MonoBehaviour
     }
 
     int _kernel = -1;
+    ComputeBuffer _heightBuffer;
     void LoadTerrainData()
     {
+        if (_kernel == -1)
+            _kernel = _computeShader.FindKernel("CSMain");
+
         if (!_highResMesh || _clearHeightData)
         {
             Debug.Log("created high res mesh");
@@ -67,13 +76,11 @@ public class TerrainTile : MonoBehaviour
         _computeShader = Instantiate(_computeShader);
         _computeShader.name = "TileHeightShader";
 
-        if (_kernel == -1)
-            _kernel = _computeShader.FindKernel("CSMain");
-
         float[] heightmap = TerrainGenerator.Instance.GenerateTerrainCompute(transform.localToWorldMatrix);
-        ComputeBuffer heightMapBuffer = new ComputeBuffer(heightmap.Length, 4);
-        heightMapBuffer.SetData(heightmap);
-        _computeShader.SetBuffer(_kernel, "heightMap", heightMapBuffer);
+        if (_heightBuffer == null || (_heightBuffer.IsValid() && _heightBuffer.count != heightmap.Length))
+            _heightBuffer = new ComputeBuffer(heightmap.Length, 4);
+        _heightBuffer.SetData(heightmap);
+        _computeShader.SetBuffer(_kernel, "heightMap", _heightBuffer);
     }
     void UpdateTerrain(Mesh mesh)
     {
@@ -106,5 +113,6 @@ public class TerrainTile : MonoBehaviour
         _computeShader.Dispatch(_kernel, vertices.Length / 4 + 1, 1, 1);
 
         buffer.GetData(vertices);
+        buffer.Dispose();
     }
 }

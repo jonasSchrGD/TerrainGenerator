@@ -129,6 +129,10 @@ float GetValue(FilterData data, float3 vertex)
 {
     switch (data.FilterType)
     {
+    case -1:
+        return vertex.y;
+    case -2:
+        return 0;
     case 0://perlin
         return data.strength * PerlinNoise(data.xOffset + vertex.x, data.yOffset + vertex.z, data.scale, data.octaves, data.persistence, data.lacunarity);
     case 1://land

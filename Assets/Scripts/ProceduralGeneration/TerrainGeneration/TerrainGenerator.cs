@@ -9,10 +9,10 @@ using System.Linq;
 
 public enum FilterType
 {
-    basefilter,
-    landfilter,
-    terracefilter,
-    heightoffsetfilter
+    basefilter = 0,
+    landfilter = 1,
+    terracefilter = 2,
+    heightoffsetfilter = 3
 }
 [System.Serializable]
 public struct FilterData
@@ -84,8 +84,21 @@ public class TerrainGenerator : Singleton<TerrainGenerator>
         private set;
     }
 
-    [SerializeField]
-    bool testPerformance = false;
+    void Awake()
+    {
+        UpdateFilters();
+    }
+
+    void OnEnable()
+    {
+        UpdateFilters();
+    }
+
+    void OnValidate()
+    {
+        UpdateFilters();
+    }
+
     void Update()
     {
         _terrainMaterial.SetInt("colorCount", _heights.Length);
@@ -93,43 +106,7 @@ public class TerrainGenerator : Singleton<TerrainGenerator>
         _terrainMaterial.SetColorArray("colors", _heightColors);
     }
 
-    private void OnValidate()
-    {
-        UpdateMaxHeight();
-
-        //filter data
-        ComputeBuffer prefilterBuffer = new ComputeBuffer(Mathf.Max(prefilters.Length, 1), 52);
-        if (prefilters.Length > 0)
-            prefilterBuffer.SetData(prefilters);
-        _generatorCS.SetBuffer(kernel, "preFilters", prefilterBuffer);
-
-        ComputeBuffer biomefilterBuffer = new ComputeBuffer(Mathf.Max(biomeFilters.Length, 1), 52);
-        if (biomeFilters.Length > 0)
-            biomefilterBuffer.SetData(biomeFilters);
-        _generatorCS.SetBuffer(kernel, "biomeFilters", biomefilterBuffer);
-
-        ComputeBuffer postfilterBuffer = new ComputeBuffer(Mathf.Max(postfilters.Length, 1), 52);
-        if (postfilters.Length > 0)
-            postfilterBuffer.SetData(postfilters);
-        _generatorCS.SetBuffer(kernel, "postFilters", postfilterBuffer);
-    }
-    void UpdateMaxHeight()
-    {
-        MaxHeight = 0;
-
-        foreach (var filter in prefilters)
-            MaxHeight += filter.GetMaxHeight();
-
-        float maxBiomeHeight = 0;
-        foreach (var biome in biomeFilters)
-        {
-            float biomeHeight = biome.GetMaxHeight();
-            if (biomeHeight > maxBiomeHeight)
-                maxBiomeHeight = biomeHeight;
-        }
-        MaxHeight += maxBiomeHeight;
-    }
-
+    [SerializeField]
     int kernel = -1;
     ComputeBuffer _vertexBuffer;
     ComputeBuffer _heightBuffer;
@@ -137,9 +114,6 @@ public class TerrainGenerator : Singleton<TerrainGenerator>
 
     public float[] GenerateTerrainCompute(Matrix4x4 localToWorld)
     {
-        if (kernel == -1)
-            kernel = _generatorCS.FindKernel("CalculateHeight");
-
         float[] heightData;
         if (!_loadedPlane || _heightBuffer == null || _vertexBuffer == null)
         {
@@ -169,5 +143,54 @@ public class TerrainGenerator : Singleton<TerrainGenerator>
         //vertexbuffer.GetData(vertices);
 
         return heightData;
+    }
+
+    void CheckKernel()
+    {
+        if (kernel != -1)
+            return;
+
+        kernel = _generatorCS.FindKernel("CalculateHeight");
+        _loadedPlane = false;
+    }
+
+    void UpdateMaxHeight()
+    {
+        MaxHeight = 0;
+
+        foreach (var filter in prefilters)
+            MaxHeight += filter.GetMaxHeight();
+
+        float maxBiomeHeight = 0;
+        foreach (var biome in biomeFilters)
+        {
+            float biomeHeight = biome.GetMaxHeight();
+            if (biomeHeight > maxBiomeHeight)
+                maxBiomeHeight = biomeHeight;
+        }
+        MaxHeight += maxBiomeHeight;
+    }
+    void UpdateFilters()
+    {
+        CheckKernel();
+        UpdateMaxHeight();
+
+        ComputeBuffer prefilterBuffer = new ComputeBuffer(Mathf.Max(prefilters.Length, 1), sizeof(int) * 3 + sizeof(float) * 10);
+        if (prefilters.Length > 0)
+            prefilterBuffer.SetData(prefilters);
+        _generatorCS.SetBuffer(kernel, "preFilters", prefilterBuffer);
+
+        ComputeBuffer biomefilterBuffer = new ComputeBuffer(Mathf.Max(biomeFilters.Length, 1), 52);
+        if (biomeFilters.Length > 0)
+            biomefilterBuffer.SetData(biomeFilters);
+        _generatorCS.SetBuffer(kernel, "biomeFilters", biomefilterBuffer);
+
+        ComputeBuffer postfilterBuffer = new ComputeBuffer(Mathf.Max(postfilters.Length, 1), 52);
+        if (postfilters.Length == 0)
+        {
+            postfilterBuffer.SetData(new FilterData[] { });
+        }
+        postfilterBuffer.SetData(postfilters);
+        _generatorCS.SetBuffer(kernel, "postFilters", postfilterBuffer);
     }
 }
